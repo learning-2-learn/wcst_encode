@@ -8,6 +8,6 @@ services:
       - "JUPYTER_PASSWORD=${JUPYTER_PASSWORD:-simple}"
     volumes:
       - .:/src/wcst_encode
-      #- $HOME/.aws/credentials:/root/.aws/credentials:ro
-      #- $HOME/.ssh/id_rsa:/root/.ssh/id_rsa
-      #- /mnt/U19_NAS/hackathon:/data
+      - $HOME/.aws/credentials:/root/.aws/credentials:ro
+      - $HOME/.ssh/id_rsa:/root/.ssh/id_rsa
+      - /mnt/U19_NAS/hackathon:/data
