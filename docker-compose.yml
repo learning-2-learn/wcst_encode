@@ -3,13 +3,11 @@ services:
   notebook:
     build: .
     ports:
-      - "${JUPYTER_IP:-127.0.0.1}:${JUPYTER_PORT:-8888}:8888"  
+      - "${JUPYTER_IP:-127.0.0.1}:${JUPYTER_PORT:-8888}:8888"
     environment:
       - "JUPYTER_PASSWORD=${JUPYTER_PASSWORD:-simple}"
-    runtime: nvidia
     volumes:
       - .:/src/wcst_encode
       - $HOME/.aws/credentials:/root/.aws/credentials:ro
       - $HOME/.ssh/id_rsa:/root/.ssh/id_rsa
       - /mnt/U19_NAS/hackathon:/data
-
