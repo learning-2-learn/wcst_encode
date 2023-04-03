@@ -1,3 +1,10 @@
+# Mac files
+.DS_Stores
+
+# temp files
+~*
+*~
+
 # computed
 computed/
 
