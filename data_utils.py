@@ -2,13 +2,13 @@ from constants import FEATURES
 import numpy as np
 import pandas as pd
 
-def get_X_by_bins(bin_size, data):
+def get_behavior_by_bins(bin_size, beh):
     """
     bin_size: in miliseconds, bin size
     data: dataframe for behavioral data from object features csv
     Returns: new dataframe with one-hot encoding of features, feedback
     """
-    max_time = np.max(data["TrialEnd"].values)
+    max_time = np.max(beh["TrialEnd"].values)
     max_bin_idx = int(max_time / bin_size) + 1
     columns = FEATURES + ["CORRECT", "INCORRECT"]
     types = ["f4" for _ in columns]
@@ -16,7 +16,7 @@ def get_X_by_bins(bin_size, data):
     dtype = np.dtype(zipped)
     arr = np.zeros((max_bin_idx), dtype=dtype)
 
-    for _, row in data.iterrows():
+    for _, row in beh.iterrows():
         # grab features of item chosen
         item_chosen = int(row["ItemChosen"])
         color = row[f"Item{item_chosen}Color"]
@@ -39,6 +39,28 @@ def get_X_by_bins(bin_size, data):
     df["bin_idx"] = np.arange(len(df))
     return df
 
+
+def get_spikes_by_bins(bin_size, spike_times):
+    """Given a bin_size and a series of spike times, return spike counts by bin. 
+    Args:
+        bin_size: size of bins in miliseconds
+        spike_times: dataframe with unit_id, spike times. 
+    Returns: 
+        df with bin_idx, unit_* as columns, filled with spike counts
+    """
+
+    units = np.unique(spike_times.UnitID.values)
+    time_stamp_max = int(spike_times.SpikeTime.max()) + 1
+
+    num_time_bins = int(time_stamp_max/bin_size) + 1
+    bins = np.arange(num_time_bins) * bin_size
+
+    df = pd.DataFrame(data={'bin_idx': np.arange(num_time_bins)[:-1]})
+    for unit in units:
+        unit_spike_times = spike_times[spike_times.UnitID==unit].SpikeTime.values
+        unit_spike_counts, bin_edges = np.histogram(unit_spike_times, bins=bins)
+        df[f'unit_{unit}'] = unit_spike_counts
+    return df
 
 def get_trial_intervals(behavioral_data, event="FeedbackOnset", pre_interval=0, post_interval=0, bin_size=50):
     """Per trial, finds time interval surrounding some event in the behavioral data
@@ -68,3 +90,39 @@ def get_trial_intervals(behavioral_data, event="FeedbackOnset", pre_interval=0, 
     intervals_df["IntervalStartBin"] = (intervals_df["IntervalStartTime"] / bin_size).astype(int)
     intervals_df["IntervalEndBin"] = (intervals_df["IntervalEndTime"] / bin_size).astype(int)
     return intervals_df
+
+
+def get_design_matrix(spikes_by_bins, beh_by_bins, columns, tau_pre, tau_post):
+    """
+    Reformats data as a design matrix dataframe, where for each of the specified columns, 
+    additional columns are added for each of the time points between tau_pre and tau_post
+    Args:
+        spike_by_bins: df with bin_idx, unit_* as columns
+        beh_by_bins: df with bin_idx, behavioral vars of interest as columns
+        columns: columns to include, must be present in either spike_by_bins or beh_by_bins
+        tau_pre: number of bins to look in the past
+        tau_post: number of bins to look in the future
+    Returns:
+        df with bin_idx, columns for each time points between tau_pre and tau_post
+    """
+    joint = pd.merge(spikes_by_bins, beh_by_bins, on="bin_idx", how="inner")
+    res = pd.DataFrame()
+    taus = np.arange(-tau_pre, tau_post)
+    for tau in taus:
+        shift_idx = -1 * tau
+        column_names = [f"{x}_{tau}" for x in columns]
+        res[column_names] = joint.shift(shift_idx)[columns]
+    res["bin_idx"] = joint["bin_idx"]
+    return res
+
+
+def get_interval_bins(intervals):
+    """
+    Gets all the bins belonging to all the intervals
+    Args:
+        intervals: df with trialnumber, IntervalStartBin, IntervalEndBin
+    Returns:
+        np array of all bins for all trials falling between startbin and endbin
+    """
+    interval_bins = intervals.apply(lambda x: np.arange(x.IntervalStartBin, x.IntervalEndBin).astype(int), axis=1)
+    return np.concatenate(interval_bins.to_numpy())
