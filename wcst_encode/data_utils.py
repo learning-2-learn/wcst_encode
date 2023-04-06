@@ -1,4 +1,4 @@
-from constants import FEATURES
+from .constants import FEATURES
 import numpy as np
 import pandas as pd
 
