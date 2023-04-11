@@ -1,5 +1,6 @@
 from .constants import FEATURES, CHOICE_FIXATION_TIME
 import numpy as np
+import math
 import pandas as pd
 from itertools import repeat
 
@@ -10,7 +11,7 @@ def get_behavior_by_bins(bin_size, beh):
     Returns: new dataframe with one-hot encoding of features, feedback
     """
     max_time = np.max(beh["TrialEnd"].values)
-    max_bin_idx = int(np.ceil(max_time / bin_size))
+    max_bin_idx = math.ceil(max_time / bin_size)
     columns = FEATURES + ["CORRECT", "INCORRECT"]
     zipped = list(zip(columns, repeat("f4")))
     dtype = np.dtype(zipped)
@@ -24,7 +25,7 @@ def get_behavior_by_bins(bin_size, beh):
         pattern = row[f"Item{item_chosen}Pattern"]
 
         chosen_time = row["FeedbackOnset"] - CHOICE_FIXATION_TIME
-        chosen_bin = int(np.floor(chosen_time / bin_size))
+        chosen_bin = math.floor(chosen_time / bin_size)
         arr[chosen_bin][color] = 1
         arr[chosen_bin][shape] = 1
         arr[chosen_bin][pattern] = 1
@@ -77,9 +78,9 @@ def get_trial_intervals(behavioral_data, event="FeedbackOnset", pre_interval=0, 
         DataFrame with num_trials length, columns: TrialNumber,
         IntervalStartTime, IntervalEndTime
     """
-    assert (pre_interval >= 0), "pre interval cannot be negative"
-    assert (post_interval >= 0), "post interval cannot be negative"
-
+    if pre_interval >= 0 or post_interval >= 0:
+        raise ValueError("Neither pre_interval: {pre_interval} or post_interval: {post_interval} should be negative")
+    
     trial_event_times = behavioral_data[["TrialNumber", event]]
 
     intervals_df = pd.DataFrame(columns=["TrialNumber", "IntervalStartTime", "IntervalEndTime"])
