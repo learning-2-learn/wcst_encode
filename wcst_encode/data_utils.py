@@ -1,6 +1,7 @@
-from .constants import FEATURES
+from .constants import FEATURES, CHOICE_FIXATION_TIME
 import numpy as np
 import pandas as pd
+from itertools import repeat
 
 def get_behavior_by_bins(bin_size, beh):
     """
@@ -9,10 +10,9 @@ def get_behavior_by_bins(bin_size, beh):
     Returns: new dataframe with one-hot encoding of features, feedback
     """
     max_time = np.max(beh["TrialEnd"].values)
-    max_bin_idx = int(max_time / bin_size) + 1
+    max_bin_idx = int(np.ceil(max_time / bin_size))
     columns = FEATURES + ["CORRECT", "INCORRECT"]
-    types = ["f4" for _ in columns]
-    zipped = list(zip(columns, types))
+    zipped = list(zip(columns, repeat("f4")))
     dtype = np.dtype(zipped)
     arr = np.zeros((max_bin_idx), dtype=dtype)
 
@@ -23,18 +23,20 @@ def get_behavior_by_bins(bin_size, beh):
         shape = row[f"Item{item_chosen}Shape"]
         pattern = row[f"Item{item_chosen}Pattern"]
 
-        chosen_time = row["FeedbackOnset"] - 800
-        chosen_bin = int(chosen_time / bin_size)
+        chosen_time = row["FeedbackOnset"] - CHOICE_FIXATION_TIME
+        chosen_bin = int(np.floor(chosen_time / bin_size))
         arr[chosen_bin][color] = 1
         arr[chosen_bin][shape] = 1
         arr[chosen_bin][pattern] = 1
 
-        feedback_bin = int(row["FeedbackOnset"] / bin_size)
+        feedback_bin = int(np.floor(row["FeedbackOnset"] / bin_size))
         # print(feedback_bin)
         if row["Response"] == "Correct":
             arr[feedback_bin]["CORRECT"] = 1
-        else:
+        elif row["Response"] == "Incorrect":
             arr[feedback_bin]["INCORRECT"] = 1
+        else: 
+            raise ValueError(f"{row['Response']} is undefined")
     df = pd.DataFrame(arr)
     df["bin_idx"] = np.arange(len(df))
     return df
@@ -50,15 +52,13 @@ def get_spikes_by_bins(bin_size, spike_times):
     """
 
     units = np.unique(spike_times.UnitID.values)
-    time_stamp_max = int(spike_times.SpikeTime.max()) + 1
-
-    num_time_bins = int(time_stamp_max/bin_size) + 1
-    bins = np.arange(num_time_bins) * bin_size
+    num_time_bins = int(spike_times.SpikeTime.max() / bin_size) + 1
+    bin_edges = np.arange(num_time_bins) * bin_size
 
     df = pd.DataFrame(data={'bin_idx': np.arange(num_time_bins)[:-1]})
     for unit in units:
         unit_spike_times = spike_times[spike_times.UnitID==unit].SpikeTime.values
-        unit_spike_counts, bin_edges = np.histogram(unit_spike_times, bins=bins)
+        unit_spike_counts, _ = np.histogram(unit_spike_times, bins=bin_edges)
         df[f'unit_{unit}'] = unit_spike_counts
     return df
 
@@ -67,28 +67,27 @@ def get_trial_intervals(behavioral_data, event="FeedbackOnset", pre_interval=0, 
 
     Args:
         behavioral_data: Dataframe describing each trial, must contain
-            columns: TrialNumber, whatever 'event' param describes
+            columns: TrialNumber, as well as the column corresponding to the  `event` parameter
         event: name of event to align around, must be present as a
             column name in behavioral_data Dataframe
-        pre_interval: number of miliseconds before event
-        post_interval: number of miliseconds after event
+        pre_interval: number of miliseconds before the event to include. Should be >= 0
+        post_interval: number of miliseconds after the event to include. Should be >= 0
 
     Returns:
         DataFrame with num_trials length, columns: TrialNumber,
         IntervalStartTime, IntervalEndTime
     """
+    assert (pre_interval >= 0), "pre interval cannot be negative"
+    assert (post_interval >= 0), "post interval cannot be negative"
+
     trial_event_times = behavioral_data[["TrialNumber", event]]
 
-    intervals = np.empty((len(trial_event_times), 3))
-    intervals[:, 0] = trial_event_times["TrialNumber"]
-    intervals[:, 1] = trial_event_times[event] - pre_interval
-    intervals[:, 2] = trial_event_times[event] + post_interval
     intervals_df = pd.DataFrame(columns=["TrialNumber", "IntervalStartTime", "IntervalEndTime"])
     intervals_df["TrialNumber"] = trial_event_times["TrialNumber"].astype(int)
     intervals_df["IntervalStartTime"] = trial_event_times[event] - pre_interval
     intervals_df["IntervalEndTime"] = trial_event_times[event] + post_interval
-    intervals_df["IntervalStartBin"] = (intervals_df["IntervalStartTime"] / bin_size).astype(int)
-    intervals_df["IntervalEndBin"] = (intervals_df["IntervalEndTime"] / bin_size).astype(int)
+    intervals_df["IntervalStartBin"] = np.floor(intervals_df["IntervalStartTime"] / bin_size).astype(int)
+    intervals_df["IntervalEndBin"] = np.floor(intervals_df["IntervalEndTime"] / bin_size).astype(int)
     return intervals_df
 
 
@@ -104,6 +103,7 @@ def get_design_matrix(spikes_by_bins, beh_by_bins, columns, tau_pre, tau_post):
         tau_post: number of bins to look in the future
     Returns:
         df with bin_idx, columns for each time points between tau_pre and tau_post
+        missing time shift values will be filled with nans
     """
     joint = pd.merge(spikes_by_bins, beh_by_bins, on="bin_idx", how="inner")
     res = pd.DataFrame()

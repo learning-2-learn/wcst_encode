@@ -6,7 +6,8 @@ FEATURES = [
     'ESCHER', 'POLKADOT', 'RIPPLE', 'SWIRL'
 ]
 
-NUM_UNITS = 59
-
-COLUMN_NAMES_W_UNITS = FEATURES + ["CORRECT", "INCORRECT"] + [f"unit_{i}" for i in range(0, NUM_UNITS)]
 COLUMN_NAMES = FEATURES + ["CORRECT", "INCORRECT"]
+
+# time in miliseconds for required fixation on a card to register a choice
+# also time between choice and feedback signals
+CHOICE_FIXATION_TIME = 800
